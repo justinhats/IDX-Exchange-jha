@@ -40,11 +40,11 @@ office_segment = generate_segment_summary(df, ['ListOfficeName', 'BuyerOfficeNam
 
 # Apply IQR to identify outliers
 def apply_iqr_filter(df, column):
-    Q1 = df[column].quantile(0.25) [cite: 466, 467]
-    Q3 = df[column].quantile(0.75) [cite: 468]
-    IQR = Q3 - Q1 [cite: 469]
-    lower = Q1 - 1.5 * IQR [cite: 470]
-    upper = Q3 + 1.5 * IQR [cite: 471]
+    Q1 = df[column].quantile(0.25) 
+    Q3 = df[column].quantile(0.75) 
+    IQR = Q3 - Q1 
+    lower = Q1 - 1.5 * IQR 
+    upper = Q3 + 1.5 * IQR 
     
     # extreme values flagged for review
     df[f'{column}_outlier_flag'] = (df[column] < lower) | (df[column] > upper)
@@ -60,8 +60,8 @@ df_filtered = df[~(df['ClosePrice_outlier_flag'] |
                    df['DaysOnMarket_outlier_flag'])].copy()
 
 # final summary
-print(f"Week 7 Cleaned Rows: {len(df_filtered)} (Original: {len(df)})") [cite: 485]
-print(f"Median ClosePrice Before/After: {df['ClosePrice'].median()} / {df_filtered['ClosePrice'].median()}") [cite: 485]
+print(f"Post IQR Cleaned Rows: {len(df_filtered)} (Original: {len(df)})") 
+print(f"Median ClosePrice Before/After: {df['ClosePrice'].median()} / {df_filtered['ClosePrice'].median()}") 
 
 # datasets.
 df.to_csv('sold_with_outlier_flags.csv', index=False)
