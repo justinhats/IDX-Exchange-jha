@@ -1,42 +1,68 @@
 import pandas as pd
 
-# load cleaned data
+# load cleaned dataset
 df = pd.read_csv('final_cleaned_sold.csv')
 
-# keep only the necessary info for dashboards; remove metadata and secondary school info.
-core_fields = [
-    'ListingKey', 'CloseDate', 'ClosePrice', 'ListPrice', 'OriginalListPrice', 
-    'LivingArea', 'DaysOnMarket', 'Latitude', 'Longitude', 'PropertySubType', 
-    'City', 'CountyOrParish', 'PostalCode', 'YearBuilt', 'rate_30yr_fixed',
-    'ListOfficeName', 'BuyerOfficeName', 'ListAgentFullName', 'year_month'
-]
-df = df[core_fields].copy()
+# date conversions
+date_cols = ['CloseDate', 'PurchaseContractDate', 'ListingContractDate']
+for col in date_cols:
+    df[col] = pd.to_datetime(df[col])
 
-# flag outliers and then filter out. IQR to identify outliers
-def remove_iqr_outliers(df, column):
-    Q1 = df[column].quantile(0.25)
-    Q3 = df[column].quantile(0.75)
-    IQR = Q3 - Q1
-    lower = Q1 - 1.5 * IQR
-    upper = Q3 + 1.5 * IQR
-    return df[(df[column] >= lower) & (df[column] <= upper)]
-
-# Aapply for price, sqft, and days on market
-df = remove_iqr_outliers(df, 'ClosePrice')
-df = remove_iqr_outliers(df, 'LivingArea')
-df = remove_iqr_outliers(df, 'DaysOnMarket')
-
-# get rid of unrealistic values that might still be in data after IQR filtering.
-df = df[
-    (df['ClosePrice'] > 50000) &    # Removes distressed sales/placeholder prices
-    (df['LivingArea'] > 200) &      # Removes non-residential footprints
-    (df['YearBuilt'] > 1800)        # Removes potential data entry errors in year
-]
-
-# create price ratio and price per sqft for metrics in dashboards.
+# price ratio from close to original
 df['price_ratio'] = df['ClosePrice'] / df['OriginalListPrice']
+
+# normalize price across sizes
 df['price_per_sqft'] = df['ClosePrice'] / df['LivingArea']
 
-df.to_csv('final_market_data_for_tableau.csv', index=False)
+# time from listing to contract signing
+df['listing_to_contract_days'] = (df['PurchaseContractDate'] - df['ListingContractDate']).dt.days
 
-print(f"Final columns: {len(df.columns)}. Final rows: {len(df)}.")
+# time from contract signing to closing
+df['contract_to_close_days'] = (df['CloseDate'] - df['PurchaseContractDate']).dt.days
+
+# year-month period 
+df['YrMo'] = df['CloseDate'].dt.to_period('M')
+
+# summary statistics: close price, price per sqft, days on market, price ratio compared by median and mean
+def generate_segment_summary(df, groupby_cols):
+    summary = df.groupby(groupby_cols).agg({
+        'ClosePrice': ['median', 'mean'],
+        'price_per_sqft': 'mean',
+        'DaysOnMarket': 'median',
+        'price_ratio': 'mean'
+    }).reset_index()
+    return summary
+
+# required segments
+property_segment = generate_segment_summary(df, ['PropertyType', 'PropertySubType'])
+geo_segment = generate_segment_summary(df, ['CountyOrParish', 'MLSAreaMajor'])
+office_segment = generate_segment_summary(df, ['ListOfficeName', 'BuyerOfficeName'])
+
+# Apply IQR to identify outliers
+def apply_iqr_filter(df, column):
+    Q1 = df[column].quantile(0.25) [cite: 466, 467]
+    Q3 = df[column].quantile(0.75) [cite: 468]
+    IQR = Q3 - Q1 [cite: 469]
+    lower = Q1 - 1.5 * IQR [cite: 470]
+    upper = Q3 + 1.5 * IQR [cite: 471]
+    
+    # extreme values flagged for review
+    df[f'{column}_outlier_flag'] = (df[column] < lower) | (df[column] > upper)
+    return df, lower, upper
+
+# apply to needed fields
+for col in ['ClosePrice', 'LivingArea', 'DaysOnMarket']:
+    df, low, high = apply_iqr_filter(df, col)
+
+# filter out the outleirs
+df_filtered = df[~(df['ClosePrice_outlier_flag'] | 
+                   df['LivingArea_outlier_flag'] | 
+                   df['DaysOnMarket_outlier_flag'])].copy()
+
+# final summary
+print(f"Week 7 Cleaned Rows: {len(df_filtered)} (Original: {len(df)})") [cite: 485]
+print(f"Median ClosePrice Before/After: {df['ClosePrice'].median()} / {df_filtered['ClosePrice'].median()}") [cite: 485]
+
+# datasets.
+df.to_csv('sold_with_outlier_flags.csv', index=False)
+df_filtered.to_csv('final_market_data_for_tableau.csv', index=False)
